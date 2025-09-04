@@ -1,5 +1,4 @@
-! TODO: Make temperature a command line parameter
-! TODO: Add (periodic) boundary conditions
+! TODO: Add chemical potential
 
 program MCPC
    use iso_c_binding
@@ -7,9 +6,9 @@ program MCPC
    use sdl2
    implicit none
 
-   real, parameter :: T = 0.1
    integer, dimension(:, :), allocatable :: grid
-   integer, parameter :: NX=80, NY=60
+   integer, parameter :: NX=160, NY=120
+   real :: T
    integer :: i, j, ierr
    real :: r
 
@@ -21,14 +20,24 @@ program MCPC
    integer, parameter :: WINDOW_WIDTH = 800, WINDOW_HEIGTH = 600
    integer, parameter :: RECT_WIDTH = WINDOW_WIDTH / NX, RECT_HEIGTH = WINDOW_HEIGTH / NY
 
+   read_command_line: block
+      character(len=256) :: arg
+      if (command_argument_count().lt.1) then
+         T = 0.1
+      else
+         call get_command_argument(1, arg)
+         read (arg, *) T
+      end if
+   end block read_command_line
+
    call random_seed()
 
-   allocate(grid(NX, NY))
+   allocate(grid(0:NX+1, 0:NY+1))
    grid = 0
-   do i = 2,NX-1
-      do j = 2,NY-1
+   do i = 1,NX
+      do j = 1,NY
          call random_number(r)
-         grid(i,j) = merge(0, 1, r.le.0.75)
+         grid(i,j) = merge(1, 0, r.le.0.25)
       end do
    end do
 
@@ -71,6 +80,8 @@ program MCPC
       call SDL_Render_Present(renderer)
       ! call SDL_Delay(20)
       do i = 1,100
+         ! call periodic_bconds()
+         call dirichlet_bconds(0)
          call next_grid()
       end do
    end do event_loop
@@ -100,11 +111,11 @@ contains
       integer, dimension(2, 4), parameter :: offset = reshape([[-1, 0], [1, 0], [0, -1], [0, 1]], shape(offset))
       integer, dimension(2), parameter :: s = shape(offset)
 
-      call random_index(i1, j1); call clamp(i1, 2, NX-1); call clamp(j1, 2, NY-1)
-      call random_index(i2, j2); call clamp(i2, 2, NX-1); call clamp(j2, 2, NY-1)
-      if (grid(i1, j1).eq.grid(i2,j2)) then
-         return
-      end if
+      i1 = 1; j1 = 1; i2 = 1; j2 = 1;
+      do while (grid(i1, j1).eq.grid(i2,j2))
+         call random_index(i1, j1)
+         call random_index(i2, j2)
+      end do
 
       E_curr = 0
       E_swap = 0
@@ -133,6 +144,21 @@ contains
       call random_number(r); ri = int(r * NX + 1)
       call random_number(r); rj = int(r * NY + 1)
    end subroutine random_index
+
+   subroutine dirichlet_bconds(val)
+      integer, intent(in) :: val
+      grid(0,    1:NY) = val
+      grid(NX+1, 1:NY) = val
+      grid(1:NX, 0   ) = val
+      grid(1:NX, NY+1) = val
+   end subroutine dirichlet_bconds
+
+   subroutine periodic_bconds()
+      grid(0,    1:NY) = grid(NX, 1:NY)
+      grid(NX+1, 1:NY) = grid(1,  1:NY)
+      grid(1:NX, 0   ) = grid(1:NX, NY)
+      grid(1:NX, NY+1) = grid(1:NX, 1 )
+   end subroutine periodic_bconds
 
    subroutine clamp(val, lo, hi)
       integer, intent(inout) :: val

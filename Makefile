@@ -1,4 +1,4 @@
-F_FLAGS = -Wall -Wextra -pedantic -Wconversion -Wshadow -std=f2018
+F_FLAGS = -Wall -Wextra -pedantic -Wconversion -Wshadow -Wno-unused-function -std=f2018
 
 DEBUG ?= 0
 

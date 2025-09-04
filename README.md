@@ -6,8 +6,10 @@ Adapted from [this video](https://www.youtube.com/watch?v=itRV2jEtV8Q&t=1634s).
 
 ```console
 $ make
-$ ./MCPC
+$ ./MCPC 0.1
 ```
+
+The temperature is passed to MCPC via the command line.
 
 ## Dependencies
 
