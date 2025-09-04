@@ -1,3 +1,6 @@
+! TODO: Make temperature a command line parameter
+! TODO: Add (periodic) boundary conditions
+
 program MCPC
    use iso_c_binding
    use iso_fortran_env, only: error_unit
@@ -106,7 +109,7 @@ contains
       E_curr = 0
       E_swap = 0
 
-      do o = 1,s(1)
+      do o = 1,s(2)
          E_curr = E_curr + merge(-1, 0, grid(i1,j1).eq.grid(i1+offset(1,o), j1+offset(2,o)).and.grid(i1,j1).eq.1)
          E_swap = E_swap + merge(-1, 0, grid(i2,j2).eq.grid(i1+offset(1,o), j1+offset(2,o)).and.grid(i2,j2).eq.1)
 
@@ -115,30 +118,7 @@ contains
       end do
 
       q = exp(real(E_curr - E_swap, 4) / T)
-      if (q.ne.q) then
-         write (error_unit, "('E_curr = ',I0)") E_curr
-         write (error_unit, "('E_swap = ',I0)") E_swap
-         error stop "q is NaN"
-      end if
-
-      if (q.ge.huge(q)) then
-         write (error_unit, "('E_curr = ',I0)") E_curr
-         write (error_unit, "('E_swap = ',I0)") E_swap
-         error stop "q is inf"
-      end if
-      
       p = q / (1.0 + q)
-      if (p.ne.p) then
-         write (error_unit, "('E_curr = ',I0)") E_curr
-         write (error_unit, "('E_swap = ',I0)") E_swap
-         error stop "p is NaN"
-      end if
-      if (p.lt.0.0.or.p.gt.1.0) then
-         print "('q = ',ES13.6)", q
-         print "('p = ',ES13.6)", p
-         error stop "Probability is not in [0,1]"
-      end if
-
       call random_number(r)
       if (r.le.p) then
          o            = grid(i1, j1)
