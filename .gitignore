@@ -1,0 +1,9 @@
+.DS_Store
+.cache/
+.vscode/
+
+*.swp
+.fortls
+
+MCPC
+MCPC.dSYM
