@@ -9,6 +9,7 @@ program MCPC
    integer, dimension(:, :), allocatable :: grid
    integer, parameter :: NX=160, NY=120
    real :: T
+   real, parameter :: dT = 0.01
    integer :: i, j, ierr
    real :: r
 
@@ -68,6 +69,12 @@ program MCPC
             case (SDL_KEYDOWN)
                if (event%key%key_sym%sym.eq.SDLK_q) then
                   exit event_loop
+               elseif (event%key%key_sym%sym.eq.SDLK_h) then
+                  T = max(0.01, T - dT)
+                  print "('T = ',ES13.6)", T
+               elseif (event%key%key_sym%sym.eq.SDLK_j) then
+                  T = min(2.0, T + dT)
+                  print "('T = ',ES13.6)", T
                end if
          end select
       end do
