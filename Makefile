@@ -13,16 +13,22 @@ endif
 
 SDL_INC = -I/opt/homebrew/include/SDL2
 SDL_MOD = -J${HOME}/opt/fortran-sdl2
-SDL_LIB  = -L/opt/homebrew/lib -lSDL2 -lSDL2_ttf
+SDL_LIB = -L/opt/homebrew/lib -lSDL2 -lSDL2_ttf
 SDL_LIB += -L${HOME}/opt/fortran-sdl2 -lfortran-sdl2 -lfortran-sdl2_ttf
 
-MCPC: MCPC.f90 render_text.o
+MCPC: build/MCPC.o build/render_text.o
 	${FC} ${F_FLAGS} ${SDL_MOD} -o $@ $^ ${SDL_LIB}
 
-render_text.o: render_text.c
-	${CC} ${C_FLAGS} ${SDL_INC} -fPIC -c -o $@ $<
+build/MCPC.o: src/MCPC.f90 build
+	${FC} ${F_FLAGS} ${SDL_MOD} -c -o $@ $<
+
+build/render_text.o: src/render_text.c build
+	${CC} ${C_FLAGS} ${SDL_INC} -c -o $@ $<
+
+build:
+	mkdir -p build
 
 clean:
-	rm -fr MCPC render_text.o *.dSYM
+	rm -fr MCPC *.dSYM build/
 
 .PHONY: clean

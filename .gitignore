@@ -7,4 +7,4 @@
 
 MCPC
 MCPC.dSYM
-render_text.o
+build/
