@@ -1,4 +1,4 @@
-F_FLAGS = -Wall -Wextra -pedantic -Wconversion -Wshadow -Wno-unused-function -std=f2018
+F_FLAGS = -Wall -Wextra -pedantic -Wconversion -Wshadow -Wno-unused-function -Wno-compare-reals -std=f2018
 C_FLAGS = -Wall -Wextra -pedantic -Wconversion -Wshadow -Wno-unused-function -std=c99
 
 DEBUG ?= 0
@@ -16,13 +16,13 @@ SDL_MOD = -J${HOME}/opt/fortran-sdl2
 SDL_LIB  = -L/opt/homebrew/lib -lSDL2 -lSDL2_ttf
 SDL_LIB += -L${HOME}/opt/fortran-sdl2 -lfortran-sdl2 -lfortran-sdl2_ttf
 
-MCPC: MCPC.f90 text.o
-	${FC} ${F_FLAGS} ${SDL_MOD} -o $@ $< text.o ${SDL_LIB}
+MCPC: MCPC.f90 render_text.o
+	${FC} ${F_FLAGS} ${SDL_MOD} -o $@ $^ ${SDL_LIB}
 
-text.o: text.c
+render_text.o: render_text.c
 	${CC} ${C_FLAGS} ${SDL_INC} -fPIC -c -o $@ $<
 
 clean:
-	rm -fr MCPC text.o *.dSYM
+	rm -fr MCPC render_text.o *.dSYM
 
 .PHONY: clean

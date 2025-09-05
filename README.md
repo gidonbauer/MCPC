@@ -1,6 +1,6 @@
 # Markov Chain Monte Carlo Phase Change Simulation
 
-Adapted from [this video](https://www.youtube.com/watch?v=itRV2jEtV8Q&t=1634s).
+Adapted from [this video](https://www.youtube.com/watch?v=itRV2jEtV8Q).
 
 ## Quickstart
 

@@ -1,19 +1,19 @@
-! TODO: Add chemical potential
+! TODO: Add better way to change T and C
 
 program MCPC
    use iso_c_binding
-   use iso_fortran_env, only: error_unit
+   use iso_fortran_env, only: error_unit, WP => real64
    use sdl2
    use sdl2_ttf
    implicit none
 
    integer, dimension(:, :), allocatable :: grid
    integer, parameter :: NX=400, NY=300, N_SUBITER = 100
-   real :: T, C
-   real, parameter :: dT = 0.01, dC = 0.01
+   real(WP) :: T, C
+   real(WP), parameter :: Tmin = 0.01, Tmax = 5.0, dT = 0.01
+   real(WP), parameter :: Cmin = -5.0, Cmax = 5.0, dC = 0.01
    logical :: use_periodic_bcond
-   integer :: i, j, ierr
-   real :: r
+   integer :: ierr
 
    ! type(SDL_Window), pointer :: window
    type(c_ptr)        :: window, renderer, font
@@ -21,19 +21,24 @@ program MCPC
    integer, parameter :: WINDOW_WIDTH = 800, WINDOW_HEIGTH = 600, TEXT_HEIGHT = 50
    integer, parameter :: RECT_WIDTH = WINDOW_WIDTH / NX, RECT_HEIGTH = WINDOW_HEIGTH / NY
 
-   T = 1.0
-   C = 1.0
+   T = 0.5
+   C = -2.0
    use_periodic_bcond = .false.
    call random_seed()
 
-   allocate(grid(0:NX+1, 0:NY+1))
-   grid = 0
-   do i = 1,NX
-      do j = 1,NY
-         call random_number(r)
-         grid(i,j) = merge(1, 0, r.le.0.25)
+   initialize_grid: block
+      integer  :: i, j
+      real(WP) :: r
+
+      allocate(grid(0:NX+1, 0:NY+1))
+      grid = 0
+      do i = 1,NX
+         do j = 1,NY
+            call random_number(r)
+            grid(i,j) = merge(1, 0, r.le.0.25)
+         end do
       end do
-   end do
+   end block initialize_grid
 
    ierr = SDL_Init(SDL_INIT_VIDEO)
    if (ierr.ne.0) then
@@ -75,13 +80,13 @@ program MCPC
                elseif (event%key%key_sym%sym.eq.SDLK_p) then
                   use_periodic_bcond = .not.use_periodic_bcond
                elseif (event%key%key_sym%sym.eq.SDLK_h) then
-                  T = max(0.01, T - dT)
+                  T = max(Tmin, T - dT)
                elseif (event%key%key_sym%sym.eq.SDLK_j) then
-                  T = min(2.0, T + dT)
+                  T = min(Tmax, T + dT)
                elseif (event%key%key_sym%sym.eq.SDLK_k) then
-                  C = max(0.01, C - dC)
+                  C = max(Cmin, C - dC)
                elseif (event%key%key_sym%sym.eq.SDLK_l) then
-                  C = min(2.0, C + dC)
+                  C = min(Cmax, C + dC)
                end if
          end select
       end do
@@ -94,14 +99,17 @@ program MCPC
 
       call SDL_Render_Present(renderer)
       ! call SDL_Delay(20)
-      do i = 1,N_SUBITER
-         if (use_periodic_bcond) then
-            call periodic_bconds()
-         else
-            call dirichlet_bconds(0)
-         end if
-         call next_grid()
-      end do
+      update: block
+         integer :: i
+         do i = 1,N_SUBITER
+            if (use_periodic_bcond) then
+               call periodic_bconds()
+            else
+               call dirichlet_bconds(0)
+            end if
+            call next_grid()
+         end do
+      end block update
    end do event_loop
 
    call SDL_Destroy_Renderer(renderer)
@@ -113,7 +121,8 @@ program MCPC
 
 contains
    subroutine render_grid()
-      type(sdl_rect)     :: rect
+      type(sdl_rect) :: rect
+      integer        :: i, j
 
       ierr = SDL_Set_Render_Draw_Color(renderer, uint8(0), uint8(136), uint8(204), uint8(255))
       do i = 1,NX
@@ -138,14 +147,53 @@ contains
          end subroutine render_T_
       end interface 
 
-      write (text, "('T = ',F4.2,', C = ',F4.2,', P = ',L1)") T, C, use_periodic_bcond
+      write (text, "('T = ',F5.2,', C = ',F5.2,', P = ',L1)") T, C, use_periodic_bcond
       call render_T_(renderer, font, trim(text) // achar(0), WINDOW_WIDTH, TEXT_HEIGHT)
    end subroutine render_T
 
    subroutine next_grid()
-      integer :: i1, j1, i2, j2, o
-      integer :: E_curr, E_swap
-      real    :: q, p, r
+      integer  :: i, j, o
+      real(WP) :: E_curr, E_swap, q, p, r
+      integer, dimension(2, 4), parameter :: offset = reshape([[-1, 0], [1, 0], [0, -1], [0, 1]], shape(offset))
+      integer, dimension(2), parameter :: s = shape(offset)
+
+      call random_index(i, j)
+
+      ! EC = E - CN
+      E_curr = 0.0
+      E_swap = 0.0
+      if (grid(i,j).eq.0) then
+         do o = 1,s(2)
+            E_swap = E_swap + merge(-1, 0, grid(i+offset(1,o), j+offset(2,o)).eq.1)
+         end do
+         E_swap = E_swap - C
+      else
+         do o = 1,s(2)
+            E_curr = E_curr + merge(-1, 0, grid(i+offset(1,o), j+offset(2,o)).eq.1)
+         end do
+         E_curr = E_curr - C
+      end if
+
+      q = exp(real(E_curr - E_swap, WP) / T)
+      if (is_nan_or_inf(q)) then
+         write (error_unit, "('q = ',ES13.6)") q
+         error stop "q is NaN or inf"
+      end if
+      p = q / (1.0 + q)
+      if (p.lt.0.0.or.p.gt.1.0) then
+         write (error_unit, "('p = ',ES13.6)") p
+         error stop "p is not in [0,1]"
+      end if
+      call random_number(r)
+      if (r.le.p) then
+         grid(i, j) = 1 - grid(i,j)
+      end if
+   end subroutine next_grid
+
+   subroutine next_grid_swap()
+      integer  :: i1, j1, i2, j2, o
+      integer  :: E_curr, E_swap
+      real(WP) :: q, p, r
       integer, dimension(2, 4), parameter :: offset = reshape([[-1, 0], [1, 0], [0, -1], [0, 1]], shape(offset))
       integer, dimension(2), parameter :: s = shape(offset)
 
@@ -166,7 +214,7 @@ contains
          E_swap = E_swap + merge(-1, 0, grid(i1,j1).eq.grid(i2+offset(1,o), j2+offset(2,o)).and.grid(i1,j1).eq.1)
       end do
 
-      q = exp(real(E_curr - E_swap, 4) / T)
+      q = exp(real(E_curr - E_swap, WP) / T)
       p = q / (1.0 + q)
       call random_number(r)
       if (r.le.p) then
@@ -174,11 +222,11 @@ contains
          grid(i1, j1) = grid(i2, j2)
          grid(i2, j2) = o
       end if
-   end subroutine next_grid
+   end subroutine next_grid_swap
 
    subroutine random_index(ri, rj)
       integer, intent(out) :: ri, rj
-      real :: r
+      real(WP) :: r
       call random_number(r); ri = int(r * NX + 1)
       call random_number(r); rj = int(r * NY + 1)
    end subroutine random_index
@@ -197,6 +245,15 @@ contains
       grid(1:NX, 0   ) = grid(1:NX, NY)
       grid(1:NX, NY+1) = grid(1:NX, 1 )
    end subroutine periodic_bconds
+
+   function is_nan_or_inf(val) result(res)
+      real(WP), intent(in) :: val
+      logical :: res
+
+      res = .false.
+      res = res .or. val.ne.val        ! Check NaN
+      res = res .or. val.ge.huge(val)  ! Check inf
+   end function is_nan_or_inf
 
    subroutine clamp(val, lo, hi)
       integer, intent(inout) :: val
