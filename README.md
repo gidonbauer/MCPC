@@ -6,10 +6,12 @@ Adapted from [this video](https://www.youtube.com/watch?v=itRV2jEtV8Q&t=1634s).
 
 ```console
 $ make
-$ ./MCPC 0.1
+$ ./MCPC
 ```
 
-The temperature is passed to MCPC via the command line.
+Press `h` to lower the temperature and `j` to increase it.
+Press `k` to lower the chemical potential and `l` to increase it.
+Press `p` to toggle periodic boundary conditions.
 
 ## Dependencies
 

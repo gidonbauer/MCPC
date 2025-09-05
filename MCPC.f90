@@ -4,33 +4,26 @@ program MCPC
    use iso_c_binding
    use iso_fortran_env, only: error_unit
    use sdl2
+   use sdl2_ttf
    implicit none
 
    integer, dimension(:, :), allocatable :: grid
-   integer, parameter :: NX=160, NY=120
-   real :: T
-   real, parameter :: dT = 0.01
+   integer, parameter :: NX=400, NY=300, N_SUBITER = 100
+   real :: T, C
+   real, parameter :: dT = 0.01, dC = 0.01
+   logical :: use_periodic_bcond
    integer :: i, j, ierr
    real :: r
 
    ! type(SDL_Window), pointer :: window
-   type(c_ptr)        :: window, renderer
+   type(c_ptr)        :: window, renderer, font
    type(sdl_event)    :: event
-   type(sdl_rect)     :: rect
-   integer            :: flags
-   integer, parameter :: WINDOW_WIDTH = 800, WINDOW_HEIGTH = 600
+   integer, parameter :: WINDOW_WIDTH = 800, WINDOW_HEIGTH = 600, TEXT_HEIGHT = 50
    integer, parameter :: RECT_WIDTH = WINDOW_WIDTH / NX, RECT_HEIGTH = WINDOW_HEIGTH / NY
 
-   read_command_line: block
-      character(len=256) :: arg
-      if (command_argument_count().lt.1) then
-         T = 0.1
-      else
-         call get_command_argument(1, arg)
-         read (arg, *) T
-      end if
-   end block read_command_line
-
+   T = 1.0
+   C = 1.0
+   use_periodic_bcond = .false.
    call random_seed()
 
    allocate(grid(0:NX+1, 0:NY+1))
@@ -48,8 +41,7 @@ program MCPC
       error stop "Could not initialize SDL"
    end if
 
-   flags = ior(SDL_WINDOW_RESIZABLE, SDL_WINDOW_OPENGL)
-   window = SDL_Create_Window("MCPC" // achar(0), 0, 0, WINDOW_WIDTH, WINDOW_HEIGTH, flags)
+   window = SDL_Create_Window("MCPC" // achar(0), 0, 0, WINDOW_WIDTH, WINDOW_HEIGTH + TEXT_HEIGHT, SDL_WINDOW_OPENGL)
    if (.not.c_associated(window)) then
       error stop "Could not create window"
    end if
@@ -58,6 +50,17 @@ program MCPC
    if (.not.c_associated(renderer)) then
       write (error_unit, "('SDL Error: ',A)") SDL_Get_Error()
       error stop "Could not create renderer"
+   end if
+
+   ierr = TTF_Init()
+   if (ierr.ne.0) then
+      write (error_unit, "('SDL Error: ',A)") SDL_Get_Error()
+      error stop "Could not initialize TTF"
+   end if
+   font = TTF_Open_Font("assets/LinLibertine_RI.ttf" // achar(0), 40)
+   if (.not.c_associated(font)) then
+      write (error_unit, "('SDL Error: ',A)") SDL_Get_Error()
+      error stop "Could not open font"
    end if
 
    event_loop: do
@@ -69,12 +72,16 @@ program MCPC
             case (SDL_KEYDOWN)
                if (event%key%key_sym%sym.eq.SDLK_q) then
                   exit event_loop
+               elseif (event%key%key_sym%sym.eq.SDLK_p) then
+                  use_periodic_bcond = .not.use_periodic_bcond
                elseif (event%key%key_sym%sym.eq.SDLK_h) then
                   T = max(0.01, T - dT)
-                  print "('T = ',ES13.6)", T
                elseif (event%key%key_sym%sym.eq.SDLK_j) then
                   T = min(2.0, T + dT)
-                  print "('T = ',ES13.6)", T
+               elseif (event%key%key_sym%sym.eq.SDLK_k) then
+                  C = max(0.01, C - dC)
+               elseif (event%key%key_sym%sym.eq.SDLK_l) then
+                  C = min(2.0, C + dC)
                end if
          end select
       end do
@@ -83,33 +90,57 @@ program MCPC
       ierr = SDL_Render_Clear(renderer)
 
       call render_grid()
+      call render_T()
 
       call SDL_Render_Present(renderer)
       ! call SDL_Delay(20)
-      do i = 1,100
-         ! call periodic_bconds()
-         call dirichlet_bconds(0)
+      do i = 1,N_SUBITER
+         if (use_periodic_bcond) then
+            call periodic_bconds()
+         else
+            call dirichlet_bconds(0)
+         end if
          call next_grid()
       end do
    end do event_loop
 
    call SDL_Destroy_Renderer(renderer)
    call SDL_Destroy_Window(window)
+   call TTF_Close_Font(font)
+   call TTF_Quit()
    call SDL_Quit()
    deallocate(grid)
 
 contains
    subroutine render_grid()
+      type(sdl_rect)     :: rect
+
       ierr = SDL_Set_Render_Draw_Color(renderer, uint8(0), uint8(136), uint8(204), uint8(255))
       do i = 1,NX
          do j = 1,NY
             if (grid(i,j).eq.1) then
-               rect = SDL_Rect((i-1)*RECT_HEIGTH, (j-1)*RECT_WIDTH, RECT_WIDTH, RECT_HEIGTH)
+               rect = SDL_Rect((i-1)*RECT_WIDTH, (j-1)*RECT_HEIGTH + TEXT_HEIGHT, RECT_WIDTH, RECT_HEIGTH)
                ierr = SDL_Render_Fill_Rect(renderer, rect)
             end if
          end do
       end do
    end subroutine render_grid
+
+   subroutine render_T()
+      character(kind=c_char, len=256) :: text
+
+      interface
+         subroutine render_T_(renderer, font, text, window_width, text_height) bind(c, name="render_T_c")
+             use iso_c_binding
+             type(c_ptr), intent(in), value :: renderer, font
+             character(kind=c_char), dimension(*), intent(in) :: text
+             integer(kind=c_int), intent(in), value :: window_width, text_height
+         end subroutine render_T_
+      end interface 
+
+      write (text, "('T = ',F4.2,', C = ',F4.2,', P = ',L1)") T, C, use_periodic_bcond
+      call render_T_(renderer, font, trim(text) // achar(0), WINDOW_WIDTH, TEXT_HEIGHT)
+   end subroutine render_T
 
    subroutine next_grid()
       integer :: i1, j1, i2, j2, o
