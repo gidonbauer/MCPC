@@ -4,7 +4,10 @@
 
 *.swp
 .fortls
+compile_commands.json
 
 MCPC
 MCPC.dSYM
+MCPC2
+MCPC2.dSYM
 build/
